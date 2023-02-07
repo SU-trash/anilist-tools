@@ -1,16 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <title>anilist-tools</title>
     <meta charset="UTF-8">
     <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-
-    <title>anilist-tools</title>
+    <py-config>
+        packages = ['pyodide-http', 'requests']
+        files = ['/utils.py', '/staff_types.py', '/upcoming_sequels.py']
+    </py-config>
 </head>
 <body>
 A collection of tools using the Anilist API.
 <py-script>
-    print('Hello, World!')
+    # requests lib patch via pyodide per https://github.com/pyscript/pyscript/issues/91#issuecomment-1370958654 and
+    # https://github.com/koenvo/pyodide-http#usage
+    import pyodide_http
+    pyodide_http.patch_all()
+
+    import requests
+
+    print("Hello, World!")
+    response = requests.get('https://raw.githubusercontent.com/statsbomb/open-data/master/data/lineups/15946.json')
+    print(f"requests response: {response}")
 </py-script>
 </body>
 </html>
