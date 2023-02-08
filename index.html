@@ -3,26 +3,58 @@
 <head>
     <title>anilist-tools</title>
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="https://pyscript.net/alpha/pyscript.css" />
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
     <script defer src="https://pyscript.net/latest/pyscript.js"></script>
-    <py-config>
+    <!-- As required by https://github.com/koenvo/pyodide-http#enabling-cross-origin-isolation,
+    enable Cross Origin Isolation on GitHub Pages, via a tweak of the file suggested in
+    https://github.com/community/community/discussions/13309#discussioncomment-3844940, using require-corp instead. -->
+    <script src="enable-threads.js"></script>
+    <!-- pyodide-http doesn't seem to work via <py-env>, need <py-config> -->
+    <py-config type="toml">
         packages = ['pyodide-http', 'requests']
-        files = ['/utils.py', '/staff_types.py', '/upcoming_sequels.py']
+        terminal = true
+
+        [[fetch]]
+        files = ['./utils.py', './staff_types.py', './upcoming_sequels.py']
     </py-config>
 </head>
 <body>
-A collection of tools using the Anilist API.
-<py-script>
-    # requests lib patch via pyodide per https://github.com/pyscript/pyscript/issues/91#issuecomment-1370958654 and
-    # https://github.com/koenvo/pyodide-http#usage
-    import pyodide_http
-    pyodide_http.patch_all()
+    <py-script>
+        from contextlib import redirect_stdout
+        import io
+        import time
 
-    import requests
+        # requests lib patch via pyodide per https://github.com/pyscript/pyscript/issues/91#issuecomment-1370958654 and
+        # https://github.com/koenvo/pyodide-http#usage
+        import pyodide_http
+        pyodide_http.patch_all()
+        import requests
 
-    print("Hello, World!")
-    response = requests.get('https://raw.githubusercontent.com/statsbomb/open-data/master/data/lineups/15946.json')
-    print(f"requests response: {response}")
-</py-script>
+        import upcoming_sequels
+
+        def get_upcoming():
+            print("Call to get_upcoming()")
+            username = Element('anilist-username').element.value
+
+            # STDOUT capture hack to use the CLI tools without modification
+            #f = io.StringIO()
+            #with redirect_stdout(f):
+            try:
+                upcoming_sequels.main([username])
+            except Exception as e:
+                print(type(e))
+                print(e)
+            #sequels_text = f.getvalue()
+
+            Element('sequels-output').element.innerText = "done"
+            time.sleep(10)
+            Element('sequels-output').element.innerText = "done sleep test"
+    </py-script>
+
+    A collection of tools using the AniList API. prototype v12
+    <div>Enter your AniList username</div>
+    <input type="text" id="anilist-username"/>
+    <button id="submit-button" type="submit" py-onClick="get_upcoming()">Get Upcoming Sequels</button>
+    <div id="sequels-output">Replace me</div>
 </body>
 </html>

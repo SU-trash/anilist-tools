@@ -9,7 +9,24 @@ def safe_post_request(post_json, verbose=True):
     """Send a post request to the AniList API, automatically waiting and retrying if the rate limit was encountered.
     Returns the 'data' field of the response. Note that this may be None if the request found nothing (404).
     """
-    response = requests.post(URL, json=post_json)
+    print(f"Call #{safe_post_request.total_queries} to safe_post_request")
+    # The AniList API normally returns responses with a header: `access-control-allow-origin: *`
+    # which dodges CORS headaches.
+    # However the retry-after response appears not to do so, and causes our pyodide patch of the requests library
+    # to complain that it's not allowed to view the response body because we're not an allowed origin anymore, or
+    # something.
+    # Manually catch the exception. The exception type also appears to be from the pyodide module, but pyodide only
+    # runs in browsers and so can't be pip-installed, meaning we can't directly catch pyodide.JsException...
+    # so do a horrible string exception type check instead
+    try:
+        response = requests.post(URL, json=post_json)
+    except Exception as e:
+        if str(type(e)) == "<class 'pyodide.JsException'>":
+            print(f"Rate limit encountered; waiting 61 seconds as a guesstimate...")
+            time.sleep(61)
+            response = requests.post(URL, json=post_json)
+        else:
+            raise
 
     # Handle rate limit
     while response.status_code == 429:
@@ -17,18 +34,27 @@ def safe_post_request(post_json, verbose=True):
             retry_after = int(response.headers['Retry-After']) + 1
             if verbose:
                 retry_msg = f"Rate limit encountered; waiting {retry_after} seconds..."
-                print(retry_msg, end='', flush=True)  # No trailing newline so we can overwrite this printout
+                print(retry_msg)
+                #print(retry_msg, end='', flush=True)  # No trailing newline so we can overwrite this printout
 
             time.sleep(retry_after)
 
             # Write back over the rate limit message with whitespace
-            if verbose:
-                print('\r' + len(retry_msg) * " ", end='\r', flush=True)  # Both '\r' here so cursor looks nice...
+            # if verbose:
+            #     print('\r' + len(retry_msg) * " ", end='\r', flush=True)  # Both '\r' here so cursor looks nice...
         else:  # Retry-After should always be present, but have seen it be missing for some users; retry quickly
             time.sleep(0.1)
             #print(f"AniList API gave rate limit response without retry time; trying waiting {retry_after} seconds...")
 
-        response = requests.post(URL, json=post_json)
+        try:
+            response = requests.post(URL, json=post_json)
+        except Exception as e:
+            if str(type(e)) == "<class 'pyodide.JsException'>":
+                print(f"Rate limit encountered; waiting 61 seconds as a guesstimate...")
+                time.sleep(61)
+                response = requests.post(URL, json=post_json)
+            else:
+                raise
 
     safe_post_request.total_queries += 1  # We'll ignore requests that got 429'd
 

@@ -130,7 +130,8 @@ query ($mediaId: Int) {
                 queue.add(show['id'])
 
 
-if __name__ == '__main__':
+def main(args=None):
+    """Main entrypoint with optional args."""
     parser = argparse.ArgumentParser(
         description="Given an anilist username, check what shows from their completed or planning lists have known\n"
                     "upcoming seasons.",
@@ -140,7 +141,7 @@ if __name__ == '__main__':
                         help="Check only for sequels of shows in the user's planning list.")
     parser.add_argument('-c', '--completed', action='store_true',
                         help="Check only for sequels of shows in the user's completed list.")
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     user_id = get_user_id_by_name(args.username)
 
@@ -169,3 +170,7 @@ if __name__ == '__main__':
                 print(show['title']['english'] or show['title']['romaji'])
 
     print(f"\nTotal queries: {safe_post_request.total_queries}")
+
+
+if __name__ == '__main__':
+    main()
