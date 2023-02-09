@@ -1,12 +1,13 @@
 """Given an anilist username, check what shows from their completed or planning lists have known upcoming seasons."""
 
 import argparse
+import asyncio
 from datetime import datetime
 
 from utils import safe_post_request, depaginated_request
 
 
-def get_user_id_by_name(username):
+async def get_user_id_by_name(username):
     """Given an AniList username, fetch the user's ID."""
     query_user_id = '''
 query ($username: String) {
@@ -15,10 +16,10 @@ query ($username: String) {
     }
 }'''
 
-    return safe_post_request({'query': query_user_id, 'variables': {'username': username}})['User']['id']
+    return (await safe_post_request({'query': query_user_id, 'variables': {'username': username}}))['User']['id']
 
 
-def get_user_media(user_id, status='COMPLETED'):
+async def get_user_media(user_id, status='COMPLETED'):
     """Given an AniList user ID, fetch their anime list, returning a list of media objects sorted by score (desc)."""
     query = '''
 query ($userId: Int, $status: MediaListStatus, $page: Int, $perPage: Int) {
@@ -41,11 +42,11 @@ query ($userId: Int, $status: MediaListStatus, $page: Int, $perPage: Int) {
     }
 }'''
 
-    return [list_entry['media'] for list_entry in depaginated_request(query=query,
-                                                                      variables={'userId': user_id, 'status': status})]
+    return [list_entry['media'] for list_entry in await depaginated_request(query=query,
+                                                                            variables={'userId': user_id, 'status': status})]
 
 
-def get_season_shows(season: str, season_year: int) -> list:
+async def get_season_shows(season: str, season_year: int) -> list:
     """Given a season (WINTER, SPRING, SUMMER, FALL) and year, return a list of shows from that season."""
     query = '''
 query ($season: MediaSeason, $seasonYear: Int, $page: Int, $perPage: Int) {
@@ -62,7 +63,7 @@ query ($season: MediaSeason, $seasonYear: Int, $page: Int, $perPage: Int) {
         }
     }
 }'''
-    return depaginated_request(query=query, variables={'season': season, 'seasonYear': season_year})
+    return await depaginated_request(query=query, variables={'season': season, 'seasonYear': season_year})
 
 
 def fuzzy_date_greater_or_equal_to(fuzzy_date, date: datetime):
@@ -79,7 +80,7 @@ def fuzzy_date_greater_or_equal_to(fuzzy_date, date: datetime):
     return True
 
 
-def get_related_media(show_id):
+async def get_related_media(show_id):
     """Given a media ID, return a generator of IDs for all airing or future anime that are direct or indirect relations of it.
 
     Also return their airing season and relation type.
@@ -112,8 +113,8 @@ query ($mediaId: Int) {
     related_show_ids = {show_id}  # Including itself to start avoids special-casing
     while queue:
         cur_show_id = queue.pop()
-        relations = safe_post_request({'query': query,
-                                       'variables': {'mediaId': cur_show_id}})['Media']['relations']['edges']
+        relations = (await safe_post_request({'query': query,
+                                             'variables': {'mediaId': cur_show_id}}))['Media']['relations']['edges']
         for relation in relations:
             show = relation['node']
             # Manga don't need to be included in the output and ignoring them trims our search queries way down
@@ -130,7 +131,7 @@ query ($mediaId: Int) {
                 queue.add(show['id'])
 
 
-def main(args=None):
+async def main(args=None):
     """Main entrypoint with optional args."""
     parser = argparse.ArgumentParser(
         description="Given an anilist username, check what shows from their completed or planning lists have known\n"
@@ -143,10 +144,10 @@ def main(args=None):
                         help="Check only for sequels of shows in the user's completed list.")
     args = parser.parse_args(args)
 
-    user_id = get_user_id_by_name(args.username)
+    user_id = await get_user_id_by_name(args.username)
 
     # Fetch the user's relevant media lists (anime or manga)
-    user_media_ids_by_status = {status: set(media['id'] for media in get_user_media(user_id, status))
+    user_media_ids_by_status = {status: set(media['id'] for media in await get_user_media(user_id, status))
                                 for status in ('COMPLETED', 'PLANNING', 'CURRENT')}
     user_media_ids = set().union(*user_media_ids_by_status.values())
 
@@ -162,15 +163,16 @@ def main(args=None):
         print(f"{season} {year}")
         print("=" * 40)
 
-        season_shows = get_season_shows(season=season, season_year=year)
+        season_shows = await get_season_shows(season=season, season_year=year)
 
         # Search each of the shows' relations for a show in the user's list
         for show in season_shows:
-            if any(related_media['id'] in user_media_ids for related_media in get_related_media(show['id'])):
+            # Smelly AsyncGenerator -> list conversion here since `any` doesn't work on async generators
+            if any([related_media['id'] in user_media_ids async for related_media in get_related_media(show['id'])]):
                 print(show['title']['english'] or show['title']['romaji'])
 
     print(f"\nTotal queries: {safe_post_request.total_queries}")
 
 
 if __name__ == '__main__':
-    main()
+    asyncio.run(main())

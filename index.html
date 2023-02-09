@@ -15,14 +15,12 @@
         terminal = true
 
         [[fetch]]
-        files = ['./utils.py', './staff_types.py', './upcoming_sequels.py']
+        files = ['./utils.py', './upcoming_sequels.py']
     </py-config>
 </head>
 <body>
     <py-script>
-        from contextlib import redirect_stdout
-        import io
-        import time
+        import asyncio
 
         # requests lib patch via pyodide per https://github.com/pyscript/pyscript/issues/91#issuecomment-1370958654 and
         # https://github.com/koenvo/pyodide-http#usage
@@ -32,29 +30,14 @@
 
         import upcoming_sequels
 
-        def get_upcoming():
-            print("Call to get_upcoming()")
+        async def get_upcoming():
             username = Element('anilist-username').element.value
-
-            # STDOUT capture hack to use the CLI tools without modification
-            #f = io.StringIO()
-            #with redirect_stdout(f):
-            try:
-                upcoming_sequels.main([username])
-            except Exception as e:
-                print(type(e))
-                print(e)
-            #sequels_text = f.getvalue()
-
-            Element('sequels-output').element.innerText = "done"
-            time.sleep(10)
-            Element('sequels-output').element.innerText = "done sleep test"
+            await upcoming_sequels.main([username])
     </py-script>
 
-    A collection of tools using the AniList API. prototype v12
+    A collection of tools using the AniList API. prototype v16
     <div>Enter your AniList username</div>
     <input type="text" id="anilist-username"/>
     <button id="submit-button" type="submit" py-onClick="get_upcoming()">Get Upcoming Sequels</button>
-    <div id="sequels-output">Replace me</div>
 </body>
 </html>
