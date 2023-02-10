@@ -1,6 +1,7 @@
 """Given an anilist username, and two anime seasons, compare the user's completed/watching from each, by score."""
 
 import argparse
+import asyncio
 
 from utils import safe_post_request, depaginated_request
 from upcoming_sequels import get_user_id_by_name
@@ -8,7 +9,7 @@ from upcoming_sequels import get_user_id_by_name
 
 # TODO: Use MediaListCollection to get 500 entries at a time instead of 50
 # TODO: Proper object-oriented library with e.g. User.shows(fields=[...])
-def get_user_shows(user_id, status_in=('COMPLETED',)) -> list:
+async def get_user_shows(user_id, status_in=('COMPLETED',)) -> list:
     """Given an AniList user ID, fetch the user's anime with given statuses, returning a list of show
      JSONs, including and sorted on score (desc).
      Include season and seasonYear.
@@ -38,10 +39,10 @@ query ($userId: Int, $statusIn: [MediaListStatus], $page: Int, $perPage: Int) {
 }'''
 
     return [{**list_entry['media'], 'score': list_entry['score']}  # Stuff score in too
-            for list_entry in depaginated_request(query=query, variables={'userId': user_id, 'statusIn': status_in})]
+            for list_entry in await depaginated_request(query=query, variables={'userId': user_id, 'statusIn': status_in})]
 
 
-if __name__ == '__main__':
+async def main(args=None):
     parser = argparse.ArgumentParser(
         description="Given an anilist username, check what shows from their completed or planning lists have known\n"
                     "upcoming seasons.",
@@ -50,10 +51,10 @@ if __name__ == '__main__':
     parser.add_argument('seasons', nargs='+',
                         help='Seasons or years to compare, formatted as e.g. 2021 or "Winter 2021".\n'
                              'Seasons are Winter, Spring, Summer, Fall.')
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
-    user_id = get_user_id_by_name(args.username)
-    user_shows = get_user_shows(user_id, status_in=('COMPLETED', 'CURRENT'))
+    user_id = await get_user_id_by_name(args.username)
+    user_shows = await get_user_shows(user_id, status_in=('COMPLETED', 'CURRENT'))
 
     # Pick out the user's watching/completed anime from each season and their scores
     seasonal_user_shows = []
@@ -81,3 +82,8 @@ if __name__ == '__main__':
                          for shows in seasonal_user_shows))
 
     print(f"\nTotal queries: {safe_post_request.total_queries}")
+    safe_post_request.total_queries = 0
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

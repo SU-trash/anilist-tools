@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 from collections import Counter
 
 import staff_types
@@ -10,10 +11,11 @@ COL_SEP = 3
 NUM_SHOWS_ALL_STAFF = 5  # How many shows to list for most total shared staff
 NUM_SHOWS_SUB_STAFF = 3  # How many shows to list for most of each sub-category of staff
 
+
 # Ideally we could sort on [SEARCH_MATCH, POPULARITY_DESC], but this doesn't seem to work as expected in the case of
 # shows with the exact same title (e.g. Golden Time); the less popular one is still returned.
 # TODO: Grab multiple in one query, and if the string match is exact return the most popular?
-def get_show(search, sort_by="SEARCH_MATCH"):
+async def get_show(search, sort_by="SEARCH_MATCH"):
     """Given an approximate show name, return the closest-matching show with ID and title.
     Default sorts by closeness of the string match. Use e.g. POPULARITY_DESC for cases where shows share a name (e.g.
     "Golden Time" will by default return the one no one cares about).
@@ -28,7 +30,7 @@ query ($search: String, $sort: MediaSort) {
         }
     }
 }'''
-    result = safe_post_request({'query': query, 'variables': {'search': search, 'sort': sort_by}})
+    result = await safe_post_request({'query': query, 'variables': {'search': search, 'sort': sort_by}})
     if result is not None:
         result = result['Media']
 
@@ -41,7 +43,7 @@ query ($search: String, $sort: MediaSort) {
     return result
 
 
-def get_show_studios(show_id):
+async def get_show_studios(show_id):
     """Given a show ID, return a dict of its studios, formatted as id: {"name": "...", "roles": ["..."]}."""
     query = '''
 query ($mediaId: Int) {
@@ -63,7 +65,7 @@ query ($mediaId: Int) {
     supporting_studios_dict = {}
 
     # the Media.studios API also does not seem to be paginated even though StudioConnection has pageInfo
-    for edge in safe_post_request({'query': query, 'variables': {'mediaId': show_id}})['Media']['studios']['edges']:
+    for edge in (await safe_post_request({'query': query, 'variables': {'mediaId': show_id}}))['Media']['studios']['edges']:
         if edge['isMain']:
             main_studios_dict[edge['node']['id']] = {'name': edge['node']['name'], 'roles': ["Main"]}
         else:
@@ -72,7 +74,7 @@ query ($mediaId: Int) {
     return main_studios_dict | supporting_studios_dict
 
 
-def get_show_production_staff(show_id):
+async def get_show_production_staff(show_id):
     """Given a show ID, return a dict of its production staff, formatted as id: {"name": "...", "roles": ["..."]}."""
     query = '''
 query ($mediaId: Int, $page: Int, $perPage: Int) {
@@ -97,7 +99,7 @@ query ($mediaId: Int, $page: Int, $perPage: Int) {
 }'''
     staff_dict = {}
 
-    for edge in depaginated_request(query=query, variables={'mediaId': show_id}):
+    for edge in await depaginated_request(query=query, variables={'mediaId': show_id}):
         # Account for staff potentially having multiple roles
         if edge['node']['id'] not in staff_dict:
             staff_dict[edge['node']['id']] = {'name': edge['node']['name']['full'],
@@ -108,7 +110,7 @@ query ($mediaId: Int, $page: Int, $perPage: Int) {
     return staff_dict
 
 
-def get_show_voice_actors(show_id, language="JAPANESE"):
+async def get_show_voice_actors(show_id, language="JAPANESE"):
     """Given a show ID, return a dict of its voice actors for the given language (default: "JAPANESE"), formatted as:
     id: {"name": "...", "roles": ["MAIN: Edward Elric", "SUPPORTING: Edward Elric (child)"]}.
     """
@@ -141,7 +143,7 @@ query ($mediaId: Int, $language: StaffLanguage, $page: Int, $perPage: Int) {
 }'''
     vas_dict = {}
 
-    for edge in depaginated_request(query=query, variables={'mediaId': show_id, 'language': language}):
+    for edge in await depaginated_request(query=query, variables={'mediaId': show_id, 'language': language}):
         for va_role in edge['voiceActorRoles']:
             # Account for VAs potentially having multiple roles
             if va_role['voiceActor']['id'] not in vas_dict:
@@ -157,7 +159,7 @@ query ($mediaId: Int, $language: StaffLanguage, $page: Int, $perPage: Int) {
     return vas_dict
 
 
-def get_production_staff_shows(staff_id):
+async def get_production_staff_shows(staff_id):
     """Given a staff id, return a dict of shows they've been a production staff member for and the corresponding roles.
     Formatted as {show_id: {'title': "...",
                             'roles': ["role1", "role2"]}}
@@ -184,7 +186,7 @@ query ($staffId: Int, $page: Int, $perPage: Int) {
 }'''
     shows_dict = {}
 
-    for edge in depaginated_request(query=query, variables={'staffId': staff_id}):
+    for edge in await depaginated_request(query=query, variables={'staffId': staff_id}):
         show = edge['node']
         # Account for staff potentially having multiple roles in a show
         if show['id'] not in shows_dict:
@@ -198,7 +200,7 @@ query ($staffId: Int, $page: Int, $perPage: Int) {
     return shows_dict
 
 
-def get_related_shows(show_id):
+async def get_related_shows(show_id):
     """Given a show ID, return a set of IDs for all shows that are directly or indirectly related to it."""
     query = '''
 query ($mediaId: Int) {
@@ -227,8 +229,8 @@ query ($mediaId: Int) {
     related_show_ids = {show_id}  # Including itself to start avoids special-casing
     while queue:
         cur_show_id = queue.pop()
-        relations = safe_post_request({'query': query,
-                                       'variables': {'mediaId': cur_show_id}})['Media']['relations']['edges']
+        relations = (await safe_post_request({'query': query,
+                                              'variables': {'mediaId': cur_show_id}}))['Media']['relations']['edges']
         for relation in relations:
             # Manga don't need to be included in the output and ignoring them trims our search queries way down
             if relation['node']['id'] not in related_show_ids and relation['node']['type'] == 'ANIME':
@@ -246,7 +248,7 @@ query ($mediaId: Int) {
     return related_show_ids
 
 
-if __name__ == '__main__':
+async def main(args=None):
     parser = argparse.ArgumentParser(
         description="Find all studios/staff/VAs common to all of the given shows.\n"
                     "If given only one show, list shows with highest numbers of shared staff and compare to the top"
@@ -261,20 +263,20 @@ if __name__ == '__main__':
     parser.add_argument('--ignore-related', action='store_true',
                         help="Ignore directly or indirectly related shows (sequels, prequels, OVAs, etc.) when\n"
                              "searching for similar shows")
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     # Lookup each show by name and collect studios/staff/VAs data from them
     shows = []
     for show_name in args.show_names:
         # Get the exact show ID and title based on the given approximate name
-        show = get_show(show_name, sort_by='POPULARITY_DESC' if args.popularity else 'SEARCH_MATCH')
+        show = await get_show(show_name, sort_by='POPULARITY_DESC' if args.popularity else 'SEARCH_MATCH')
         if show is None:
             raise ValueError(f"Could not find show matching {show}")
 
         # Add data on studios, production staff, and vas
-        show['studios'] = get_show_studios(show['id'])
-        show['production_staff'] = get_show_production_staff(show['id'])
-        show['voice_actors'] = get_show_voice_actors(show['id'], language="JAPANESE")
+        show['studios'] = await get_show_studios(show['id'])
+        show['production_staff'] = await get_show_production_staff(show['id'])
+        show['voice_actors'] = await get_show_voice_actors(show['id'], language="JAPANESE")
         shows.append(show)
 
     # If given only one show, find the show with the most shared production staff and compare it
@@ -287,7 +289,7 @@ if __name__ == '__main__':
         # Ignore the show itself when searching, and related shows if specified
         ignored_show_ids = {show['id']}
         if args.ignore_related:
-            ignored_show_ids.update(get_related_shows(show['id']))
+            ignored_show_ids.update(await get_related_shows(show['id']))
             if len(ignored_show_ids) > 1:
                 print(f"Ignoring {len(ignored_show_ids) - 1} related show(s)\n")
 
@@ -311,7 +313,7 @@ if __name__ == '__main__':
         for staff_id, staff_info in show['production_staff'].items():
             roles = staff_info['roles']
             # Find all shows this staff member has had production roles in
-            show_roles = get_production_staff_shows(staff_id)  # dict of show_id: {title: "...", roles: [...]}
+            show_roles = await get_production_staff_shows(staff_id)  # dict of show_id: {title: "...", roles: [...]}
             ids_to_titles.update((k, v['title']) for k, v in show_roles.items())  # Track titles for future ref
 
             show_counts.update(show_id for show_id in show_roles.keys() if show_id not in ignored_show_ids)
@@ -344,9 +346,9 @@ if __name__ == '__main__':
         other_show_id = top_shows[0][0]
         shows.append({'id': other_show_id,
                       'title': ids_to_titles[other_show_id],
-                      'studios': get_show_studios(other_show_id),
-                      'production_staff': get_show_production_staff(other_show_id),
-                      'voice_actors': get_show_voice_actors(other_show_id, language="JAPANESE")})
+                      'studios': await get_show_studios(other_show_id),
+                      'production_staff': await get_show_production_staff(other_show_id),
+                      'voice_actors': await get_show_voice_actors(other_show_id, language="JAPANESE")})
 
         print(f"Shows with most production staff in common with {show['title']}:")
         for other_show_id, shared_staff_count in top_shows:
@@ -418,3 +420,8 @@ if __name__ == '__main__':
         print("No common studios/staff/VAs found!".center(total_width))
 
     print(f"\nTotal queries: {safe_post_request.total_queries}")
+    safe_post_request.total_queries = 0
+
+
+if __name__ == '__main__':
+    asyncio.run(main())

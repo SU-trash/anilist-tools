@@ -106,3 +106,20 @@ def dict_intersection(dicts):
         return []
 
     return [k for k in dicts[0] if all(k in d for d in dicts[1:])]
+
+
+async def async_any(bool_async_iterable):
+    """Helper since built-in any() doesn't work on async generators."""
+    async for thing in bool_async_iterable:
+        if thing:
+            return True
+
+    return False
+
+
+async def async_all(bool_async_iterable):
+    async for thing in bool_async_iterable:
+        if not thing:
+            return False
+
+    return True

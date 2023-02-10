@@ -15,12 +15,12 @@
         terminal = true
 
         [[fetch]]
-        files = ['./utils.py', './upcoming_sequels.py']
+        files = ['./compare_seasons.py', './compare_staff.py', './upcoming_sequels.py', './utils.py', './staff_types.py']
     </py-config>
 </head>
 <body>
     <py-script>
-        import asyncio
+        from js import document as _DOC
 
         # requests lib patch via pyodide per https://github.com/pyscript/pyscript/issues/91#issuecomment-1370958654 and
         # https://github.com/koenvo/pyodide-http#usage
@@ -28,16 +28,53 @@
         pyodide_http.patch_all()
         import requests
 
+        import compare_seasons
+        import compare_staff
         import upcoming_sequels
 
-        async def get_upcoming():
+        async def _compare_seasons():
+            username = Element('anilist-username').element.value
+            seasons = [Element(input_id).element.value for input_id in ('season1', 'season2')
+                       if Element(input_id).element.value]
+            await compare_seasons.main([username] + seasons)
+
+        async def _compare_staff():
+            shows = [Element(input_id).element.value for input_id in ('show1', 'show2')
+                     if Element(input_id).element.value]
+            await compare_staff.main(shows)
+
+        async def _upcoming_sequels():
             username = Element('anilist-username').element.value
             await upcoming_sequels.main([username])
+
+        def clear_terminal():
+            _DOC.getElementsByClassName("py-terminal")[0].innerHTML = ''
     </py-script>
 
-    A collection of tools using the AniList API. prototype v16
+    <div>An assortment of tools using the AniList API.</div>
+
+    <br>
     <div>Enter your AniList username</div>
     <input type="text" id="anilist-username"/>
-    <button id="submit-button" type="submit" py-onClick="get_upcoming()">Get Upcoming Sequels</button>
+
+    <br>
+    <div>Enter years and/or seasons of anime to compare your list scores from (e.g. "2022" or "Winter 2021"). Requires username.</div>
+    <input type="text" id="season1"/>
+    <input type="text" id="season2"/>
+    <button id="compare-seasons-button" type="submit" py-onClick="_compare_seasons()">Compare years/seasons</button>
+
+    <br>
+    <div>Compare the staff from two shows to find those that worked on both (username not required).</div>
+    <input type="text" id="show1"/>
+    <input type="text" id="show2"/>
+    <button id="compare-staff-button" type="submit" py-onClick="_compare_staff()">Compare staff</button>
+
+    <br>
+    <div>Find shows from the just-started or upcoming seasons for which an earlier season is in your completed/planning list (slow; ~5 min).</div>
+    <button id="upcoming-sequels-button" type="submit" py-onClick="_upcoming_sequels()">Get upcoming sequels</button>
+
+    <br>
+    <br>
+    <button id="clear-terminal-button" type="submit" py-onClick="clear_terminal()">Clear terminal</button>
 </body>
 </html>

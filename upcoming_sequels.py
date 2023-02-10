@@ -4,7 +4,7 @@ import argparse
 import asyncio
 from datetime import datetime
 
-from utils import safe_post_request, depaginated_request
+from utils import safe_post_request, depaginated_request, async_any
 
 
 async def get_user_id_by_name(username):
@@ -163,15 +163,14 @@ async def main(args=None):
         print(f"{season} {year}")
         print("=" * 40)
 
-        season_shows = await get_season_shows(season=season, season_year=year)
-
-        # Search each of the shows' relations for a show in the user's list
-        for show in season_shows:
-            # Smelly AsyncGenerator -> list conversion here since `any` doesn't work on async generators
-            if any([related_media['id'] in user_media_ids async for related_media in get_related_media(show['id'])]):
+        # Search each of the seasonal shows' relations for a show in the user's list
+        for show in await get_season_shows(season=season, season_year=year):
+            # `any` doesn't work with async generators so rolled our own
+            if await async_any(related_media['id'] in user_media_ids async for related_media in get_related_media(show['id'])):
                 print(show['title']['english'] or show['title']['romaji'])
 
     print(f"\nTotal queries: {safe_post_request.total_queries}")
+    safe_post_request.total_queries = 0
 
 
 if __name__ == '__main__':
