@@ -5,6 +5,8 @@ URL = 'https://graphql.anilist.co'
 MAX_PAGE_SIZE = 50  # The anilist API's max page size
 
 
+# TODO: I'm pretty sure as of pyscript 2024.1.2 time.sleep works and I don't need the code to be async anymore.
+#       Ref: https://github.com/pyscript/pyscript/issues/324#issuecomment-1843654051
 async def safe_post_request(post_json, verbose=True):
     """Send a post request to the AniList API, automatically waiting and retrying if the rate limit was encountered.
     Returns the 'data' field of the response. Note that this may be None if the request found nothing (404).

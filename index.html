@@ -3,15 +3,16 @@
 <head>
     <title>anilist-tools</title>
     <meta charset="UTF-8">
-    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
-    <script defer src="https://pyscript.net/latest/pyscript.js"></script>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.3/core.css" />
+    <script type="module" src="https://pyscript.net/releases/2024.1.3/core.js"></script>
     <!-- As required by https://github.com/koenvo/pyodide-http#enabling-cross-origin-isolation,
     enable Cross Origin Isolation on GitHub Pages, via a tweak of the file suggested in
     https://github.com/community/community/discussions/13309#discussioncomment-3844940, using require-corp instead. -->
-    <script src="enable-threads.js"></script>
+    <!-- <script src="enable-threads.js"></script> -->
     <!-- pyodide-http doesn't seem to work via <py-env>, need <py-config> -->
+    <!-- TODO: Can probably change back to whatever py-env was now that we don't need pyodide-http? -->
     <py-config type="toml">
-        packages = ['pyodide-http', 'requests']
+        packages = ['requests']
         terminal = true
 
         [[fetch]]
@@ -19,13 +20,9 @@
     </py-config>
 </head>
 <body>
-    <py-script>
+    <script type="py">
         from js import document as _DOC
 
-        # requests lib patch via pyodide per https://github.com/pyscript/pyscript/issues/91#issuecomment-1370958654 and
-        # https://github.com/koenvo/pyodide-http#usage
-        import pyodide_http
-        pyodide_http.patch_all()
         import requests
 
         import compare_seasons
@@ -49,7 +46,7 @@
 
         def clear_terminal():
             _DOC.getElementsByClassName("py-terminal")[0].innerHTML = ''
-    </py-script>
+    </script>
 
     <div>An assortment of tools using the AniList API.</div>
 
@@ -61,20 +58,20 @@
     <div>Enter years and/or seasons of anime to compare your list scores from (e.g. "2022" or "Winter 2021"). Requires username.</div>
     <input type="text" id="season1"/>
     <input type="text" id="season2"/>
-    <button id="compare-seasons-button" type="submit" py-onClick="_compare_seasons()">Compare years/seasons</button>
+    <button id="compare-seasons-button" type="submit" py-click="_compare_seasons()">Compare years/seasons</button>
 
     <br>
     <div>Compare the staff from two shows to find those that worked on both (username not required).</div>
     <input type="text" id="show1"/>
     <input type="text" id="show2"/>
-    <button id="compare-staff-button" type="submit" py-onClick="_compare_staff()">Compare staff</button>
+    <button id="compare-staff-button" type="submit" py-click="_compare_staff()">Compare staff</button>
 
     <br>
     <div>Find shows from the just-started or upcoming seasons for which an earlier season is in your completed/planning list (slow; ~5 min).</div>
-    <button id="upcoming-sequels-button" type="submit" py-onClick="_upcoming_sequels()">Get upcoming sequels</button>
+    <button id="upcoming-sequels-button" type="submit" py-click="_upcoming_sequels()">Get upcoming sequels</button>
 
     <br>
     <br>
-    <button id="clear-terminal-button" type="submit" py-onClick="clear_terminal()">Clear terminal</button>
+    <button id="clear-terminal-button" type="submit" py-click="clear_terminal()">Clear terminal</button>
 </body>
 </html>

@@ -2,6 +2,7 @@
 // (commit 92b108d), based on https://github.com/community/community/discussions/13309#discussioncomment-3844940,
 // with the exception that the Cross-Origin-Embedder-Policy header below is instead set to 'require-corp',
 // as required by https://github.com/koenvo/pyodide-http#enabling-cross-origin-isolation
+// TODO: Probably still need this file (check though) but shouldn't need the CORS tweak anymore.
 
 // NOTE: This file creates a service worker that cross-origin-isolates the page (read more here: https://web.dev/coop-coep/) which allows us to use wasm threads.
 // Normally you would set the COOP and COEP headers on the server to do this, but Github Pages doesn't allow this, so this is a hack to do that.
