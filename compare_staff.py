@@ -1,5 +1,5 @@
 import argparse
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timedelta
 
 import staff_types
@@ -264,7 +264,7 @@ def main():
                         help="Ignore directly or indirectly related shows (sequels, prequels, OVAs, etc.) when\n"
                              "searching for similar shows")
     parser.add_argument('-d', '--diff', action='store_true',
-                        help="List staff differing between the given shows instead of matching. Requires 2+ shows.")
+                        help="List differing staff instead of matching (e.g., compare seasons). Requires 2+ shows.")
     args = parser.parse_args()
 
     if args.diff and len(args.show_names) < 2:
@@ -410,19 +410,49 @@ def main():
 
         # TODO: Diff should really be a separate method or something...
         if args.diff:
-            staff_diffs = dict_diffs(show_staff_dicts)  # One list of unique IDs per show.
-            if not any(unique_staff_ids for unique_staff_ids in staff_diffs):  # Only really happens to Studios section.
+            # Construct a reverse {role: {staff_id: staff}} mapping for each show.
+            # Note that the roles will conveniently remain mostly ordered based on AniList's ordering of the staff.
+            show_role_to_staff_dicts = []
+            for show_staff_dict in show_staff_dicts:
+                show_role_to_staff_dict = defaultdict(dict)
+                for staff_id, staff in show_staff_dict.items():
+                    for role in staff['roles']:
+                        # Many roles have parentheticals appended with e.g. (ep 2) or ("specific song name"). We don't
+                        # count these for role-diffing purposes to avoid overly-pedantic diffs; instead add them as
+                        # specifiers after that staff's name under the role.
+                        normalized_role, *sub_part = role.split('(', maxsplit=1)
+                        normalized_role = normalized_role.strip()
+                        sub_part_suffix = " (" + sub_part[0] if sub_part else ''
+                        show_role_to_staff_dict[normalized_role][staff_id] = staff['name'].replace('\n', '').replace('\r', '') + sub_part_suffix
+
+                show_role_to_staff_dicts.append(show_role_to_staff_dict)
+
+            # Skip roles not common to all shows; these tend to be uninteresting diffs like character names or
+            # hyper-specific roles.
+            common_roles = dict_intersection(show_role_to_staff_dicts)  # Helper that preserves ordering.
+            if not common_roles:  # E.g. probably no common characters, if comparing shows instead of seasons.
                 continue
 
             print_section_header()
-            for show_idx, (show_staff, unique_staff_ids) in enumerate(zip(show_staff_dicts, staff_diffs, strict=True)):
-                for staff_id in unique_staff_ids:
-                    for r, role in enumerate(show_staff[staff_id]['roles']):
-                        cols = ["" for _ in range(len(shows) + 1)]
-                        if r == 0:  # Anilist sometimes has staff names with newlines polluting them; strip these.
-                            cols[0] = show_staff[staff_id]['name'].replace('\n', '').replace('\r', '')
-                        cols[show_idx + 1] = role
-                        col_print(cols)
+            for role in common_roles:
+                show_staffs = [d[role] for d in show_role_to_staff_dicts] # {ID: Staff} with this role for each show.
+
+                # Strip out staff common to all shows.
+                common_staff_ids = set(show_staffs[0].keys()).intersection(*(d.keys() for d in show_staffs[1:]))
+                show_staffs = [{staff_id: staff
+                                for staff_id, staff in show_staff.items()
+                                if staff_id not in common_staff_ids}
+                               for show_staff in show_staffs]
+                if not any(show_staffs):
+                    continue  # No unique staff in any show; skip this role.
+
+                # Print a row(s) with the role name followed by the staff(s) with that role in each show
+                max_staff = max(len(show_staff) for show_staff in show_staffs)
+                for i in range(max_staff):
+                    cols = [role if i == 0 else '']
+                    cols.extend((list(show_staff.values())[i] if i < len(show_staff) else "") # Inefficient but it's fine
+                                for show_staff in show_staffs)
+                    col_print(cols)
         else:
             # Find the common staff between the shows. Use a helper to avoid sets so that dict ordering is maintained
             common_staff_ids = dict_intersection(show_staff_dicts)
