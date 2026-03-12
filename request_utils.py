@@ -128,8 +128,8 @@ def dict_diffs(dicts):
 
 
 def cache(file_name, max_age: timedelta):
-    """Memoize the given function result and cache to the given JSON file on program exit, expiring each cached result
-    after a given datetime.timedelta.
+    """Memoize the given JSON-serializable function result and cache to the given JSON file on program exit, expiring
+    cache values after a given datetime.timedelta.
     """
     cache = json.load(open(file_name, 'r')) if Path(file_name).is_file() else {}
     Path(file_name).parent.mkdir(exist_ok=True)  # Create the cache dir as needed
@@ -140,6 +140,11 @@ def cache(file_name, max_age: timedelta):
             param = str([args, kwargs])  # Squash multiple args together
             if param not in cache or datetime.fromisoformat(cache[param][1]) < datetime.now():
                 cache[param] = [func(*args, **kwargs), (datetime.now() + max_age).isoformat()]
+            elif cache[param][0] and isinstance(cache[param][0], dict) and list(cache[param][0].keys())[0].isdigit():
+                # Dumb quick hack fix for ID-dict keys getting int->str mangled by JSON-serialization.
+                # Doing this properly requires arbitrary object traversal which is hard or pickle which is insecure.
+                return {int(k): v for k, v in cache[param][0].items()}
+
             return cache[param][0]
         return new_func
 
